@@ -27,7 +27,10 @@
     "contextBudgetChars": 120000,
     "entryPoints": ["main.tex"],
     "guidanceFiles": ["AGENTS.md", "CLAUDE.md"],
-    "terminologyFiles": []
+    "terminologyFiles": [],
+    "requiredGuidanceFiles": [],
+    "documentGuidance": {},
+    "referenceBuildManifest": null
   },
   "codex": {
     "command": "codex",

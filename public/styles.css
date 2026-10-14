@@ -2475,3 +2475,6 @@ button.request-location:focus-visible { color: var(--accent-ink); background: va
   .proposal-delete,
   .request-diff-line del { text-decoration: line-through; }
 }
+
+/* Book/report outlines retain the fourth heading level. */
+.outline-item.level-4 { padding-left: 42px; }

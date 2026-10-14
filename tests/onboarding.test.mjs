@@ -138,10 +138,10 @@ describe("setup: non-interactive, JSON, exit codes", () => {
     // The file it wrote loads.
     await loadReviewConfig({ appRoot, argv: ["--repo", root], env: {} });
     // Setup writes a subset of the example configuration: every agent field
-    // it writes is in the example, and the only one it leaves to its default
-    // is guidanceFiles (unset means "AGENTS.md / CLAUDE.md when they exist").
+    // it writes is in the example. Optional workflow settings keep their defaults.
+    // guidanceFiles remains unset so AGENTS.md / CLAUDE.md are discovered.
     const example = JSON.parse(await fs.readFile(path.join(appRoot, "paper-pal.config.example.json"), "utf8"));
-    assert.deepEqual(Object.keys(example.agent).filter((key) => !(key in config.agent)), ["guidanceFiles"]);
+    assert.deepEqual(Object.keys(example.agent).filter((key) => !(key in config.agent)), ["guidanceFiles", "requiredGuidanceFiles", "documentGuidance", "referenceBuildManifest"]);
     assert.deepEqual(Object.keys(config.agent).filter((key) => !(key in example.agent)), []);
     assert.equal(config.agent.promptMode, example.agent.promptMode);
   });

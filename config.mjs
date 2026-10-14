@@ -252,6 +252,14 @@ export async function loadReviewConfig({ appRoot, argv = process.argv.slice(2), 
     terminologyFiles: relativeList(shared.terminologyFiles, "agent.terminologyFiles") ?? [],
     // Agent guidance files offered as entry points when they exist.
     guidanceFiles,
+    requiredGuidanceFiles: relativeList(shared.requiredGuidanceFiles, "agent.requiredGuidanceFiles") ?? [],
+    documentGuidance: Object.fromEntries(
+      Object.entries(shared.documentGuidance || {}).map(([document, files]) => [
+        relativeSetting(document, "agent.documentGuidance"),
+        relativeList(files, "agent.documentGuidance[]") || [],
+      ]),
+    ),
+    referenceBuildManifest: shared.referenceBuildManifest ? relativeSetting(shared.referenceBuildManifest, "agent.referenceBuildManifest") : null,
   };
   const claude = {
     command: agentCommand("claude", raw.claude?.command, env),

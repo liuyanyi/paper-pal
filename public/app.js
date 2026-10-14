@@ -2702,7 +2702,7 @@ function createFrontMatterBlock(frontMatter) {
 }
 
 function outlineLevel(raw) {
-  const command = raw.trim().match(/^\\(section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i)?.[1]?.toLowerCase();
+  const command = raw.trim().match(/^\\(chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i)?.[1]?.toLowerCase();
   return { section: 1, subsection: 2, subsubsection: 3, paragraph: 3, subparagraph: 3 }[command] || 1;
 }
 
@@ -3243,7 +3243,7 @@ function canonicalOffsetAt(root, container, offset, edge = "start") {
 function unwrapPastedHeadingCommand(value, block) {
   if (!["heading", "paragraph-heading"].includes(block?.kind)) return value;
   const trimmed = String(value || "").trim();
-  const match = trimmed.match(/^\\(section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i);
+  const match = trimmed.match(/^\\(chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i);
   if (!match) return value;
   const open = match[0].lastIndexOf("{");
   let depth = 0;
@@ -3399,8 +3399,8 @@ function deactivateBlockEditing(element) {
     renderReviewText(element, element.reviewBlock);
     element.dataset.reviewLocked = "true";
     delete element.dataset.reviewPreviewHidden;
-    requestAnimationFrame(renderMath);
   }
+  requestAnimationFrame(() => renderMath(element));
 }
 
 function handleBlockPointerUp(event) {
@@ -3917,7 +3917,7 @@ async function runSectionReview() {
   try {
     const review = await api("/api/document/review", {
       method: "POST",
-      body: JSON.stringify({ path: reviewedPath }),
+      body: JSON.stringify({ path: reviewedPath, etag: state.document.etag, blockId: currentSectionOutlineItem()?.blockId }),
     });
     if (state.document?.path !== reviewedPath) {
       let kept = false;

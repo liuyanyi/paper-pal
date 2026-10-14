@@ -7,6 +7,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before
 
 ## [Unreleased]
 
+### Local thesis adaptation
+
+- Keep single-click source editing for inline math and restore typesetting on blur.
+
+- Read required project instructions, skills and document-specific plans before agent calls.
+- Recognize chapter hierarchy and bound UI-triggered section reviews to the selected heading.
+- Render upcite/inlinecite numbers from hash-verified saved successful builds without compiling.
+
+
 ### Documentation
 
 - FAQ entry (both READMEs) and a line in `llms.txt` saying that Paper Pal is not

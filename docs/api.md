@@ -219,3 +219,18 @@ hints; the page reacts by fetching the matching GET route again.
 The route table is the `if (request.method === ... && url.pathname === ...)`
 chain near the end of `server.mjs`. A pull request that adds or changes a
 route updates this page in the same change.
+
+
+### Scoped review (local thesis adapter)
+
+POST `/api/document/review` accepts optional `blockId` and `etag` with `path`.
+The heading must belong to the current outline and the etag must match. The review
+source extends from that heading to the next same-or-higher heading in the file,
+including subordinate headings. Out-of-scope findings are rejected. Source changes
+during review produce HTTP 409. Without blockId, the legacy whole-file review remains.
+The UI sends the active heading and current etag. This endpoint reviews source in
+that file; structure context retains included-file fragments separately.
+
+GET `/api/document` includes `references.buildEvidence` when a saved successful
+build is configured: buildId, project-relative aux path and applicability
+`saved-success-not-revalidated`.

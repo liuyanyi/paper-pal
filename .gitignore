@@ -21,3 +21,6 @@ examples/**/*.pdf
 # Local review state created inside a manuscript project
 .paper-pal/
 .draft-review/
+
+# Local fake-agent diagnostics from test runs
+.fake-agent/

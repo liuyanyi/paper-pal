@@ -21,6 +21,8 @@ and nothing is written to your `.tex` files until you click **Accept**.
 
 </div>
 
+> This fork adds explicit project guidance, chapter-aware outlines and scoped reviews, saved-build citation numbers, and formula restoration after editing. See [fork changes and configuration](docs/fork-changes.md).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-dark.svg">
   <img src="docs/images/flow-light.svg" alt="Paper Pal, animated. Two sentences are selected in the manuscript, Comment is chosen from the selection toolbar and a comment is typed. The card says Claude is drafting, then the proposal arrives as a red and green word diff, inline and in the comment card. Accept is clicked: the sentences are rewritten and saved to the .tex file, the text turns from grey to black, the section's review progress goes up and the PDF recompiles.">

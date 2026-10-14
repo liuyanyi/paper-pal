@@ -396,8 +396,8 @@ async function pushUndoAction(action) {
 // A sectioning command up to the brace that opens its title. The optional
 // short title of \section[short]{long} is skipped: the long title is the text
 // the author reads and edits, the short one stays untouched in the source.
-const HEADING_OPEN_PATTERN = /^\s*\\(?:section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i;
-const HEADING_COMMAND_PATTERN = /^\\(section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i;
+const HEADING_OPEN_PATTERN = /^\s*\\(?:chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i;
+const HEADING_COMMAND_PATTERN = /^\\(chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/i;
 
 // Environments whose \begin/\end lines are wrappers around ordinary prose: the
 // wrapper becomes its own hidden block and the text inside is parsed normally,
@@ -435,7 +435,7 @@ function wrapperPatterns(extraNames = []) {
     // line above it: headings, list items, wrapper boundaries and one-line commands.
     segmentStart: new RegExp(
       "^[ \\t]*\\\\(?:"
-      + "(?:section|subsection|subsubsection|paragraph|subparagraph)\\*?\\s*(?:\\[[^\\]\\n]*\\]\\s*)?\\{"
+      + "(?:chapter|section|subsection|subsubsection|paragraph|subparagraph)\\*?\\s*(?:\\[[^\\]\\n]*\\]\\s*)?\\{"
       + "|item\\b"
       + `|(?:begin|end)\\{(?:${names}|document)\\}`
       + "|(?:input|include|subfile|import|subimport|maketitle|tableofcontents|bibliographystyle|bibliography|printbibliography|appendix)\\b"
@@ -862,7 +862,7 @@ function parseBlocks(source) {
 
 function classifyBlock(raw, patterns = defaultWrapperPatterns) {
   const value = raw.trim();
-  if (/^\\(?:sub)*section\*?\s*(?:\[[^\]\n]*\]\s*)?\{/.test(value)) return "heading";
+  if (/^\\(?:chapter|(?:sub)*section)\*?\s*(?:\[[^\]\n]*\]\s*)?\{/.test(value)) return "heading";
   if (/^\\(?:sub)?paragraph\*?\s*(?:\[[^\]\n]*\]\s*)?\{/.test(value)) return "paragraph-heading";
   if (/^\\begin\{(?:equation|align|alignat|flalign|gather|multline|eqnarray)\*?\}/.test(value) || /^\\begin\{displaymath\}/.test(value) || /^\\\[/.test(value)) return "math";
   if (/^\\begin\{(?:table\*?|sidewaystable|longtable\*?)\}/.test(value)) return "table";
@@ -1169,6 +1169,7 @@ const ENVIRONMENT_BRACE_ARGUMENTS = {
   "spacing": 1, "thebibliography": 1, "subfigure": 1, "subtable": 1, "wrapfigure": 2, "adjustbox": 1, "minted": 1, "alignat": 1, "alignat*": 1,
 };
 const CITE_MODES = {
+  upcite: "superNumeric", inlinecite: "inlineNumeric",
   cite: "paren", citep: "paren", Citep: "paren", parencite: "paren", Parencite: "paren", autocite: "paren", Autocite: "paren",
   footcite: "foot", footcitetext: "foot", footfullcite: "foot", supercite: "paren", smartcite: "paren", citeyearpar: "yearParen",
   citet: "text", Citet: "text", textcite: "text", Textcite: "text", fullcite: "text",
@@ -1661,7 +1662,7 @@ function latexToDisplay(raw, kind, macros = new Map(), referenceContext = { labe
       cursor = commandEnd;
       continue;
     }
-    if (["section", "subsection", "subsubsection", "paragraph", "subparagraph"].includes(command)) {
+    if (["chapter", "section", "subsection", "subsubsection", "paragraph", "subparagraph"].includes(command)) {
       // \section[short]{long}: the short title is not shown.
       const optional = raw.slice(argumentStart).match(/^\s*\[[^\]\n]*\]\s*/);
       if (optional && raw[argumentStart + optional[0].length] === "{") argumentStart += optional[0].length;
@@ -1688,11 +1689,12 @@ function latexToDisplay(raw, kind, macros = new Map(), referenceContext = { labe
         const after = notes.length ? flatText(notes.at(-1)) : "";
         const entries = keys.map((key) => referenceContext.citations?.[key] || null);
         // A hand-written thebibliography has numbers, not authors and years.
-        const numeric = keys.length > 0 && entries.every((entry) => entry?.numeric && !entry.author);
+        const forceNumeric = ["superNumeric", "inlineNumeric"].includes(mode);
+        const numeric = forceNumeric || (keys.length > 0 && entries.every((entry) => entry?.numeric && !entry.author));
         const parts = keys.map((key, position) => {
           const citation = entries[position];
           if (!citation) return key;
-          if (numeric) return String(citation.number);
+          if (numeric) return citation.number ? String(citation.number) : `?${key}`;
           if (mode === "author") return citation.author || key;
           if (mode === "year" || mode === "yearParen") return citation.year || "n.d.";
           return `${citation.author || key}, ${citation.year || "n.d."}`;
@@ -1719,6 +1721,7 @@ function latexToDisplay(raw, kind, macros = new Map(), referenceContext = { labe
         }
         if (after && !(mode === "text" && !numeric)) appendReplacement(`, ${after}`, ...whole);
         if (wrapped) appendReplacement(shut, ...whole);
+        if (mode === "superNumeric") styles.push({ type: "footnote", start: citeStart, end: display.length });
         if (mode === "foot") styles.push({ type: "footnote", start: citeStart, end: display.length });
         cursor = close + 1;
         continue;
@@ -2017,15 +2020,29 @@ function auxGroups(value, startAt) {
 async function projectReferences() {
   const compileRoot = path.resolve(repoRoot, config.latex.cwd);
   const mainArgument = [...config.latex.args].reverse().find((value) => String(value).endsWith(".tex")) || "main.tex";
-  const auxPath = path.join(compileRoot, `${path.basename(mainArgument, ".tex")}.aux`);
+  let auxPath = path.join(compileRoot, `${path.basename(mainArgument, ".tex")}.aux`);
+  let buildEvidence = null;
+  let verifiedAux = null;
+  if (config.codex?.referenceBuildManifest) {
+    const manifestPath = path.resolve(repoRoot, config.codex.referenceBuildManifest);
+    if (!isInside(repoRoot, manifestPath) || !realPathInside(realRepoRoot, manifestPath)) throw new Error("Reference manifest must remain inside the project.");
+    const record = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    if (record.status !== "success" || !/^[A-Za-z0-9_-]+$/.test(record.build_id || "")) throw new Error("Reference manifest must identify a successful build.");
+    auxPath = path.join(path.dirname(manifestPath), "runs", record.build_id, `${path.basename(mainArgument, ".tex")}.aux`);
+    if (!realPathInside(realRepoRoot, auxPath)) throw new Error("Reference artifact must remain inside the project.");
+    const bytes = await fs.readFile(auxPath);
+    if (!record.aux_sha256 || sha(bytes) !== record.aux_sha256) throw new Error("Reference artifact hash does not match its successful build.");
+    verifiedAux = bytes.toString("utf8");
+    buildEvidence = { buildId: record.build_id, aux: relativeRepo(auxPath), applicability: "saved-success-not-revalidated" };
+  }
   const labels = {};
   const citations = {};
   try {
-    let aux = await fs.readFile(auxPath, "utf8");
+    let aux = verifiedAux ?? await fs.readFile(auxPath, "utf8");
     // \include{chapter} writes chapter.aux and names it in the main .aux.
     for (const match of [...aux.matchAll(/^\\@input\{([^{}]+[.]aux)\}/gm)].slice(0, 200)) {
-      const included = path.resolve(compileRoot, match[1]);
-      if (!isInside(compileRoot, included)) continue;
+      const included = path.resolve(path.dirname(auxPath), match[1]);
+      if (!isInside(path.dirname(auxPath), included) || !realPathInside(realRepoRoot, included)) continue;
       try {
         aux += `\n${await fs.readFile(included, "utf8")}`;
       } catch {
@@ -2056,7 +2073,7 @@ async function projectReferences() {
         if (keyGroup?.value) {
           citations[keyGroup.value] = {
             key: keyGroup.value,
-            number: stripTex(groups[0] || ""),
+            number: stripTex(groups[0] || payload?.value || ""),
             year: stripTex(groups[1] || ""),
             author: stripTex(groups[2] || "").replace(/^\{+|\}+$/g, ""),
           };
@@ -2156,7 +2173,7 @@ async function projectReferences() {
       }
     }
   }
-  return { labels, citations, macros: await projectMacros() };
+  return { labels, citations, buildEvidence, macros: await projectMacros() };
 }
 
 // \bibitem[label]{key} text ... of one thebibliography block.
@@ -2769,9 +2786,9 @@ function sourceLabel(relative) {
   return prefix && relative.startsWith(prefix) ? relative.slice(prefix.length) : relative;
 }
 
-function headingLevel(raw) {
+function headingLevel(raw, chapters = false) {
   const command = raw.trim().match(HEADING_COMMAND_PATTERN)?.[1]?.toLowerCase();
-  return { section: 1, subsection: 2, subsubsection: 3, paragraph: 3, subparagraph: 3 }[command] || 1;
+  return command === "chapter" ? 1 : ({ section: 1, subsection: 2, subsubsection: 3, paragraph: 3, subparagraph: 3 }[command] || 1) + Number(chapters);
 }
 
 function headingTitle(raw, macros = new Map()) {
@@ -2789,9 +2806,9 @@ function headingTitle(raw, macros = new Map()) {
   return "";
 }
 
-function structureHeadingLevel(raw) {
+function structureHeadingLevel(raw, chapters = false) {
   const command = raw.trim().match(HEADING_COMMAND_PATTERN)?.[1]?.toLowerCase();
-  return { section: 1, subsection: 2, subsubsection: 3, paragraph: 4, subparagraph: 5 }[command] || 1;
+  return command === "chapter" ? 1 : ({ section: 1, subsection: 2, subsubsection: 3, paragraph: 4, subparagraph: 5 }[command] || 1) + Number(chapters);
 }
 
 function structureHeadingKind(raw) {
@@ -2903,6 +2920,7 @@ async function paperStructure() {
   }
 
   await visit(mainPath);
+  const chapters = stream.some((item) => item.type === "heading" && structureHeadingKind(item.block.raw) === "chapter");
   const sections = [];
   const stack = [];
   let currentSection = null;
@@ -2923,12 +2941,12 @@ async function paperStructure() {
       continue;
     }
     if (item.type === "heading") {
-      const level = structureHeadingLevel(item.block.raw);
+      const level = structureHeadingLevel(item.block.raw, chapters);
       const kind = structureHeadingKind(item.block.raw);
       const title = headingTitle(item.block.raw, item.macros);
       if (!title) continue;
       if (level === 1) {
-        const starred = /^\s*\\section\*/i.test(item.block.raw);
+        const starred = /^\s*\\(?:chapter|section)\*/i.test(item.block.raw);
         if (!starred) {
           if (appendix) appendixNumber += 1;
           else sectionNumber += 1;
@@ -3004,7 +3022,6 @@ async function compiledOutline() {
   const mainPath = path.resolve(compileRoot, mainArgument);
   const outline = [];
   const visited = new Set();
-  const counters = { section: 0, subsection: 0, subsubsection: 0 };
   let appendixMode = false;
   const projectWide = await cachedProjectReferences();
 
@@ -3019,23 +3036,6 @@ async function compiledOutline() {
     return label || "A";
   }
 
-  function nextHeadingNumber(level, starred) {
-    if (starred) return "";
-    if (level === 1) {
-      counters.section += 1;
-      counters.subsection = 0;
-      counters.subsubsection = 0;
-    } else if (level === 2) {
-      counters.subsection += 1;
-      counters.subsubsection = 0;
-    } else {
-      counters.subsubsection += 1;
-    }
-    const section = appendixMode ? appendixLetter(counters.section) : String(counters.section);
-    if (level === 1) return section;
-    if (level === 2) return `${section}.${counters.subsection}`;
-    return `${section}.${counters.subsection}.${counters.subsubsection}`;
-  }
 
   async function visit(absolutePath) {
     const normalized = path.resolve(absolutePath);
@@ -3083,9 +3083,6 @@ async function compiledOutline() {
     for (const event of events) {
       if (event.type === "appendix") {
         appendixMode = true;
-        counters.section = 0;
-        counters.subsection = 0;
-        counters.subsubsection = 0;
         continue;
       }
       if (event.type === "heading") {
@@ -3099,7 +3096,10 @@ async function compiledOutline() {
             blockId: event.block.id,
             title: rendered,
             level,
-            number: nextHeadingNumber(level, /^\s*\\(?:section|subsection|subsubsection|paragraph|subparagraph)\*/i.test(event.block.raw)),
+            number: "",
+            kind: structureHeadingKind(event.block.raw),
+            rawHeading: event.block.raw,
+            appendix: appendixMode,
           });
         }
         continue;
@@ -3140,6 +3140,24 @@ async function compiledOutline() {
         }
       }
     }
+  }
+  const chapters = outline.some((item) => item.kind === "chapter");
+  const counts = [0, 0, 0, 0, 0, 0];
+  let wasAppendix = false;
+  for (const item of outline) {
+    if (!item.rawHeading) continue;
+    item.level = headingLevel(item.rawHeading, chapters);
+    if (item.appendix && !wasAppendix) counts.fill(0);
+    wasAppendix = Boolean(item.appendix);
+    const depth = item.level - 1;
+    if (!/^\s*\\[A-Za-z]+\*/.test(item.rawHeading)) {
+      counts[depth] += 1;
+      counts.fill(0, depth + 1);
+      const parts = counts.slice(0, depth + 1).map(String);
+      if (item.appendix) parts[0] = appendixLetter(counts[0]);
+      item.number = parts.join(".");
+    }
+    delete item.rawHeading;
   }
   const payloads = new Map();
   const directMetrics = [];
@@ -3279,6 +3297,7 @@ async function documentPayload(relativePath) {
     mathMacros: katexMacros(macros),
     frontMatter: frontMatterOf(source, macros, references),
     references: {
+      buildEvidence: references.buildEvidence,
       labels: Object.values(references.labels),
       citations: Object.values(references.citations),
       usedCitationKeys,
@@ -4060,6 +4079,7 @@ async function validateLinkedCommentTargets(rawTargets, source) {
       }
       const absoluteStart = matches[0];
       const absoluteEnd = absoluteStart + selectedText.length;
+      if (scope && (absoluteStart < scope.start || absoluteEnd > scope.end)) throw new Error("anchor outside the selected section");
       if (targetPath === source.path && absoluteStart < source.absoluteEnd && absoluteEnd > source.absoluteStart) {
         throw new Error("the target overlaps the commented passage");
       }
@@ -4135,6 +4155,7 @@ async function validateRelatedProposalChanges(rawChanges, primaryPath) {
       }
       const absoluteStart = matches[0];
       const absoluteEnd = absoluteStart + selectedText.length;
+      if (scope && (absoluteStart < scope.start || absoluteEnd > scope.end)) throw new Error("anchor outside the selected section");
       const blocks = parseBlocks(source);
       const match = selectionMatchFromAbsolute(blocks, absoluteStart, absoluteEnd)
         || selectionSpanFromAbsoluteRange(blocks, absoluteStart, absoluteEnd);
@@ -4315,7 +4336,7 @@ async function terminologyForTask(budget = null) {
 // Resolve the anchors a review returned into ranges in this one file. Findings
 // whose anchor no longer matches are dropped with a reason rather than shown
 // against the wrong text.
-async function anchorReviewFindings(rawFindings, relativePath) {
+async function anchorReviewFindings(rawFindings, relativePath, scope = null) {
   const payload = await documentPayload(relativePath);
   const blocks = parseBlocks(payload.source);
   const findings = [];
@@ -4329,6 +4350,7 @@ async function anchorReviewFindings(rawFindings, relativePath) {
       if (matches.length !== 1) throw new Error(`the anchor matched ${matches.length} places`);
       const absoluteStart = matches[0];
       const absoluteEnd = absoluteStart + selectedText.length;
+      if (scope && (absoluteStart < scope.start || absoluteEnd > scope.end)) throw new Error("anchor outside the selected section");
       const key = `${absoluteStart}:${absoluteEnd}`;
       if (seen.has(key)) throw new Error("duplicate anchor");
       const span = selectionMatchFromAbsolute(blocks, absoluteStart, absoluteEnd)
@@ -4534,6 +4556,16 @@ async function runSectionReview(body = {}) {
   let temporaryRoot = null;
   try {
     const payload = await documentPayload(relativePath);
+    let scope = null;
+    if (body.blockId !== undefined) {
+      if (body.etag !== payload.etag) throw new HttpError(409, "The source changed. Refresh before reviewing this section.");
+      const outline = await compiledOutline();
+      const item = outline.items.find((entry) => entry.path === relativePath && entry.blockId === body.blockId);
+      if (!item) throw new HttpError(409, "The selected heading changed. Refresh the outline.");
+      const next = outline.items.find((entry) => entry.path === relativePath && entry.blockIndex > item.blockIndex && entry.level <= item.level);
+      scope = { start: payload.blocks[item.blockIndex].start, end: next ? payload.blocks[next.blockIndex].start : payload.source.length, title: item.title, number: item.number };
+    }
+    const scopedSource = scope ? payload.source.slice(scope.start, scope.end) : payload.source;
     const provider = resolveProvider(body.provider);
     const model = resolveModel(provider, body.model);
     assertProviderReady(provider);
@@ -4545,13 +4577,14 @@ async function runSectionReview(body = {}) {
     // inside one character budget: the section first, then the vocabulary,
     // then the guidance files.
     const budget = readsRepo ? null : createContextBudget();
-    const documentText = budget ? budget.take(payload.source) : { source: payload.source, truncated: false };
+    const documentText = budget ? budget.take(scopedSource) : { source: scopedSource, truncated: false };
     const task = {
       version: 1,
       taskType: "paper_section_review",
       document: {
         path: relativePath,
-        chars: payload.source.length,
+        chars: scopedSource.length,
+        scope,
         ...(documentText?.truncated ? { truncated: true } : {}),
         source: documentText?.source ?? "",
       },
@@ -4565,6 +4598,7 @@ async function runSectionReview(body = {}) {
       provider,
       config,
       prompt: reviewPromptLines(task).join("\n"),
+      contextPaths: [relativePath],
       schemaPath: reviewSchemaPath,
       outputPath,
       repoRoot,
@@ -4591,7 +4625,8 @@ async function runSectionReview(body = {}) {
     } catch {
       throw new HttpError(502, `${providerLabel(provider)} did not return a review in the expected JSON format. Try again.`);
     }
-    const anchored = await anchorReviewFindings(parsed?.findings, relativePath);
+    if ((await documentPayload(relativePath)).etag !== payload.etag) throw new HttpError(409, "The source changed during review. Refresh and review again.");
+    const anchored = await anchorReviewFindings(parsed?.findings, relativePath, scope);
     return {
       ...anchored,
       summary: String(parsed?.summary || "").trim(),
@@ -4907,6 +4942,7 @@ async function generateCodexProposal(requestId) {
       provider,
       config,
       prompt,
+      contextPaths: [request.path],
       schemaPath: isLink ? linkSchemaPath : isDiscussion ? discussionSchemaPath : proposalSchemaPath,
       outputPath,
       repoRoot,
@@ -5396,7 +5432,7 @@ function normalizeProposedStructureNode(value, depth = 0) {
   return {
     id: String(value.id || `proposal_${randomBytes(4).toString("hex")}`),
     title: title.slice(0, 240),
-    kind: new Set(["section", "subsection", "paragraph"]).has(value.kind) ? value.kind : "paragraph",
+    kind: new Set(["chapter", "section", "subsection", "subsubsection", "paragraph"]).has(value.kind) ? value.kind : "paragraph",
     change: allowedChanges.has(value.change) ? value.change : "rewrite",
     reason: String(value.reason || "").trim().slice(0, 800),
     sourceNodeIds: Array.isArray(value.sourceNodeIds) ? value.sourceNodeIds.map(String).slice(0, 12) : [],
@@ -5697,7 +5733,7 @@ async function runChatTurn(sessionId) {
         ? [
             "For this structure-scoped reply, first explain the structural diagnosis conversationally in the user's language.",
             "Then end the reply with exactly one fenced block labelled structure-proposal containing valid JSON and no commentary inside the fence.",
-            "Schema: {\"summary\":\"...\",\"sections\":[{\"sectionId\":\"an id from selectedSections\",\"title\":\"...\",\"reason\":\"...\",\"nodes\":[{\"id\":\"stable proposal id\",\"title\":\"paragraph or subsection role\",\"kind\":\"section|subsection|paragraph\",\"change\":\"keep|move|split|merge|new|remove|rewrite\",\"reason\":\"...\",\"sourceNodeIds\":[\"current node ids when applicable\"],\"children\":[]}]}]}.",
+            "Schema: {\"summary\":\"...\",\"sections\":[{\"sectionId\":\"an id from selectedSections\",\"title\":\"...\",\"reason\":\"...\",\"nodes\":[{\"id\":\"stable proposal id\",\"title\":\"paragraph or subsection role\",\"kind\":\"chapter|section|subsection|subsubsection|paragraph\",\"change\":\"keep|move|split|merge|new|remove|rewrite\",\"reason\":\"...\",\"sourceNodeIds\":[\"current node ids when applicable\"],\"children\":[]}]}]}.",
             "The JSON is a reviewable proposed outline, not manuscript prose. Preserve decisions the author has left open as open and make any inferred rhetorical link explicit in the conversational diagnosis.",
           ].join("\n")
         : "Do not emit a structure-proposal block unless a paper-structure scope is active.",
@@ -5710,6 +5746,7 @@ async function runChatTurn(sessionId) {
       provider,
       config,
       prompt,
+      contextPaths: structureScope?.sections?.flatMap((section) => section.paths || []) || [latestPath],
       outputPath,
       repoRoot,
       model,

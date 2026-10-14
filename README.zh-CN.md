@@ -21,6 +21,8 @@
 
 </div>
 
+> This fork adds explicit project guidance, chapter-aware outlines and scoped reviews, saved-build citation numbers, and formula restoration after editing. See [fork changes and configuration](docs/fork-changes.md).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-dark.svg">
   <img src="docs/images/flow-light.svg" alt="Paper Pal 动画演示：在稿件里选中两句话，从选区工具条里点 Comment 并写下评论；卡片先显示 Claude is drafting，随后修改提议以红绿逐词 diff 的形式出现在正文和评论卡片里；点击 Accept 后，句子被改写并写入 .tex 文件，文字由灰变黑，该章节的审阅进度上升，PDF 自动重新编译。">

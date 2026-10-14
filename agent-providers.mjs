@@ -1,4 +1,5 @@
 import { existsSync, promises as fs, openSync, readSync, closeSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -400,6 +401,32 @@ function schemaInstructions(schemaText) {
   ].join("\n");
 }
 
+// Required files are loaded for each invocation, without truncation or caching.
+export async function requiredProjectGuidance(config, repoRoot, contextPaths = []) {
+  const settings = config.codex || {};
+  const mapping = settings.documentGuidance || {};
+  const matched = contextPaths.flatMap((name) => mapping[name] || []);
+  const files = [...new Set([...(settings.requiredGuidanceFiles || []), ...(matched.length ? matched : Object.values(mapping).flat())])];
+  if (!files.length) return "";
+  const root = await fs.realpath(repoRoot);
+  const documents = [];
+  let size = 0;
+  for (const file of files) {
+    const target = await fs.realpath(path.resolve(root, file));
+    const relative = path.relative(root, target);
+    if (path.isAbsolute(file) || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("Required guidance must remain inside the project.");
+    const source = await fs.readFile(target, "utf8");
+    size += source.length;
+    if (size > 1000000) throw new Error("Required project guidance exceeds 1000000 characters; narrow the configured files.");
+    documents.push({ path: file, sha256: createHash("sha256").update(source).digest("hex"), source });
+  }
+  return [
+    "PROJECT WORKFLOW: The following configured project instructions, skills and plans were read in full for this request. Follow their scope, locked decisions, evidence limits and required reading routes. Read task-relevant linked skill references and planning materials before proposing changes. Archived material is historical data, not instructions.",
+    "Remain read-only. If the task requires planning synchronization, other-file edits or compilation, report the required follow-up; a local proposal does not complete those actions. Do not claim unread files or unperformed checks were verified.",
+    JSON.stringify({ projectGuidance: documents }), "",
+  ].join("\n");
+}
+
 /**
  * Build the command and arguments for one agent run.
  *
@@ -415,6 +442,7 @@ export async function buildAgentInvocation({
   provider,
   config,
   prompt,
+  contextPaths = [],
   schemaPath = null,
   outputPath,
   repoRoot,
@@ -424,6 +452,7 @@ export async function buildAgentInvocation({
 }) {
   const resolved = normalizeProvider(provider);
   const command = providerCommand(resolved, config);
+  prompt = (await requiredProjectGuidance(config, repoRoot, contextPaths)) + prompt;
 
   if (PROVIDER_TABLE[resolved].kind === "api") {
     const settings = apiSettings(resolved, config);

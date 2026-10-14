@@ -251,3 +251,29 @@ when both exist. Setup writes only new names.
 To finish a migration by hand: rename `.draft-review.json` to
 `.paper-pal.json` and `.draft-review/` to `.paper-pal/` while the server is
 stopped. See the [changelog](../CHANGELOG.md) for behaviour that changed.
+
+
+## Local thesis adapter
+
+`agent.requiredGuidanceFiles` lists project-relative UTF-8 files read in full before
+each agent invocation. `agent.documentGuidance` maps manuscript paths to additional
+required files. A task without a matching document includes all mapped guidance.
+These files are placed in stdin with SHA-256 values, for rewrite, review and chat.
+Missing files, paths resolving outside the project, and more than one million
+characters fail the invocation; guidance is never silently truncated. Include the
+project AGENTS.md, relevant SKILL.md entrypoints and active planning files. Linked
+task-specific references still require the CLI agent to read them as instructed.
+This supplies the content; it is not proof that a model obeyed every instruction.
+
+`agent.referenceBuildManifest` optionally names a project-relative successful-build
+JSON record with `status: "success"`, `build_id` and `aux_sha256`. References come
+from `runs/<build_id>/main.aux` next to that manifest, verified against its SHA-256.
+This reads saved output only, independently of `latex.enabled`. It does not establish
+that the saved build matches today's source and never starts a compiler. The document
+API returns this provenance as `references.buildEvidence`. Missing or inconsistent
+configured artifacts fail explicitly rather than using a different build silently.
+
+Book/report headings support chapter, section, subsection and subsubsection, including
+starred chapters and appendix chapter counters. Structure groups a book by chapter.
+`upcite` renders saved citation numbers as superscripts; `inlinecite` renders them
+inline, retaining optional locator text. No reference numbers are invented.

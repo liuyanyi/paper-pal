@@ -54,6 +54,7 @@ writeFileSync(path.join(logRoot, "last-run.json"), JSON.stringify({
   mentionsTerminology: /task\.terminology/.test(prompt.slice(0, prompt.lastIndexOf("\n"))),
   promptHead: prompt.slice(0, 4000),
   taskType: task?.taskType ?? null,
+  reviewSource: task?.taskType === "paper_section_review" ? task.document?.source : null,
   pid: process.pid,
 }, null, 2));
 
